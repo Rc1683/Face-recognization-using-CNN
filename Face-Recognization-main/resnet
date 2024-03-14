@@ -1,0 +1,180 @@
+import matplotlib.pyplot as plt
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Flatten, Dense, Dropout, BatchNormalization, AveragePooling2D
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.optimizers import SGD
+
+# Define the ResNet-50 model
+def resnet_50(input_shape=(224, 224, 3), num_classes=16):
+    input_tensor = Input(shape=input_shape)
+
+    # Conv1
+    x = Conv2D(64, (7, 7), strides=(2, 2), padding='same', activation='relu')(input_tensor)
+    x = BatchNormalization()(x)
+    x = MaxPooling2D((3, 3), strides=(2, 2))(x)
+
+    # Conv2
+    for _ in range(3):
+        x = Conv2D(64, (1, 1), activation='relu')(x)
+        x = Conv2D(64, (3, 3), activation='relu', padding='same')(x)
+        x = Conv2D(256, (1, 1))(x)
+        x = BatchNormalization()(x)
+    x = MaxPooling2D((2, 2))(x)
+
+    # Conv3
+    for _ in range(4):
+        x = Conv2D(128, (1, 1), activation='relu')(x)
+        x = Conv2D(128, (3, 3), activation='relu', padding='same')(x)
+        x = Conv2D(512, (1, 1))(x)
+        x = BatchNormalization()(x)
+
+    # Conv4
+    for _ in range(6):
+        x = Conv2D(256, (1, 1), activation='relu')(x)
+        x = Conv2D(256, (3, 3), activation='relu', padding='same')(x)
+        x = Conv2D(1024, (1, 1))(x)
+        x = BatchNormalization()(x)
+
+    # Conv5
+    for _ in range(3):
+        x = Conv2D(512, (1, 1), activation='relu')(x)
+        x = Conv2D(512, (3, 3), activation='relu', padding='same')(x)
+        x = Conv2D(2048, (1, 1))(x)
+        x = BatchNormalization()(x)
+
+    # Global Average Pooling
+    x = AveragePooling2D((7, 7))(x)
+
+    # Flatten Layer
+    x = Flatten()(x)
+
+    # Fully Connected Layers
+    x = Dense(4096, activation='relu')(x)
+    x = Dropout(0.5)(x)
+    x = Dense(4096, activation='relu')(x)
+    x = Dropout(0.5)(x)
+    x = Dense(4096, activation='relu')(x)
+
+    # Output Layer
+    output_tensor = Dense(num_classes, activation='softmax')(x)
+
+    # Create the model
+    model = Model(inputs=input_tensor, outputs=output_tensor)
+
+    return model
+
+# Create the ResNet-50 model
+model = resnet_50()
+
+# Compile the model
+optimizer = SGD(lr=0.0001)  # Adjust the learning rate
+model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+
+# Data Generators
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True)
+
+test_datagen = ImageDataGenerator(rescale=1./255)
+
+batch_size = 32  # Experiment with different batch sizes
+
+training_set = train_datagen.flow_from_directory(
+    '/content/drive/MyDrive/Face Images/Final Training Images',
+    target_size=(224, 224),
+    batch_size=batch_size,
+    class_mode='categorical')  # Keep 'categorical' for one-hot encoding
+
+test_set = test_datagen.flow_from_directory(
+    '/content/drive/MyDrive/Face Images/Final Testing Images',
+    target_size=(224, 224),
+    batch_size=batch_size,
+    class_mode='categorical')  # Keep 'categorical' for one-hot encoding
+
+# Training the model with history
+history = model.fit(
+    training_set,
+    steps_per_epoch=training_set.samples // batch_size,
+    epochs=100,
+    validation_data=test_set,
+    validation_steps=test_set.samples // batch_size)
+
+# Plotting training and validation accuracy
+plt.plot(history.history['accuracy'], label='Training Accuracy')
+plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
+plt.title('Training and Validation Accuracy')
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.legend()
+plt.show()
+
+# Plotting training and validation loss
+plt.plot(history.history['loss'], label='Training Loss')
+plt.plot(history.history['val_loss'], label='Validation Loss')
+plt.title('Training and Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss')
+plt.legend()
+plt.show()
+
+# Evaluate the model on the test set and print the accuracy
+accuracy = model.evaluate(test_set, steps=test_set.samples // 32)[1]
+print(f'Total Accuracy on Test Set: {accuracy * 100:.2f}%')
+
+# -------  Input Testing -----
+
+from keras.preprocessing import image
+import numpy as np
+import matplotlib.pyplot as plt
+import os
+from keras.preprocessing.image import ImageDataGenerator
+
+# Define a separate ImageDataGenerator for rescaling
+rescale_datagen = ImageDataGenerator(rescale=1./255)
+
+# Load the image you want to test
+test_image_path = '/content/drive/MyDrive/Face Images/Final Testing Images/face10/1face10.jpg'
+test_image = image.load_img(test_image_path, target_size=(224, 224))
+
+# Convert the image to a numpy array
+test_image_array = image.img_to_array(test_image)
+
+# Expand the dimensions of the array to match the input shape of the model
+test_image_array = np.expand_dims(test_image_array, axis=0)
+
+# Preprocess the image (using the rescale generator)
+test_image_array = rescale_datagen.flow(test_image_array).next()
+
+# Make predictions
+predictions = model.predict(test_image_array)
+
+# Get the class indices
+class_indices = training_set.class_indices
+
+# Reverse the dictionary to get labels from indices
+labels = {v: k for k, v in class_indices.items()}
+
+# Get the predicted label
+predicted_label = labels[np.argmax(predictions)]
+
+# Construct the image path corresponding to the predicted label in the dataset
+predicted_image_folder = '/content/drive/MyDrive/Face Images/Final Testing Images/' + predicted_label
+
+# Get a list of image files in the predicted image folder
+image_files = os.listdir(predicted_image_folder)
+
+# Load and display the input image
+plt.subplot(1, 2, 1)
+plt.imshow(test_image)
+plt.title('Input Image')
+
+# Load and display the predicted image from the folder
+predicted_image_path = os.path.join(predicted_image_folder, image_files[0])  # Assuming you want the first image in the folder
+predicted_image = image.load_img(predicted_image_path, target_size=(227, 227))
+plt.subplot(1, 2, 2)
+plt.imshow(predicted_image)
+plt.title(f'Predicted Image in Folder: {predicted_label}')
+
+plt.show()

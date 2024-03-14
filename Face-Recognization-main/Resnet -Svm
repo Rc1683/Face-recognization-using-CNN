@@ -1,0 +1,143 @@
+import matplotlib.pyplot as plt
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, Conv2D, MaxPooling2D, Flatten, Dense, Dropout, BatchNormalization, AveragePooling2D
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.optimizers import SGD
+import numpy as np
+from sklearn import svm
+from sklearn.metrics import accuracy_score
+
+# Define the ResNet-50 model
+def resnet_50(input_shape=(224, 224, 3), num_classes=16):
+    input_tensor = Input(shape=input_shape)
+
+    # Conv1
+    x = Conv2D(64, (7, 7), strides=(2, 2), padding='same', activation='relu')(input_tensor)
+    x = BatchNormalization()(x)
+    x = MaxPooling2D((3, 3), strides=(2, 2))(x)
+
+    # Conv2
+    for _ in range(3):
+        x = Conv2D(64, (1, 1), activation='relu')(x)
+        x = Conv2D(64, (3, 3), activation='relu', padding='same')(x)
+        x = Conv2D(256, (1, 1))(x)
+        x = BatchNormalization()(x)
+    x = MaxPooling2D((2, 2))(x)
+
+    # Conv3
+    for _ in range(4):
+        x = Conv2D(128, (1, 1), activation='relu')(x)
+        x = Conv2D(128, (3, 3), activation='relu', padding='same')(x)
+        x = Conv2D(512, (1, 1))(x)
+        x = BatchNormalization()(x)
+
+    # Conv4
+    for _ in range(6):
+        x = Conv2D(256, (1, 1), activation='relu')(x)
+        x = Conv2D(256, (3, 3), activation='relu', padding='same')(x)
+        x = Conv2D(1024, (1, 1))(x)
+        x = BatchNormalization()(x)
+
+    # Conv5
+    for _ in range(3):
+        x = Conv2D(512, (1, 1), activation='relu')(x)
+        x = Conv2D(512, (3, 3), activation='relu', padding='same')(x)
+        x = Conv2D(2048, (1, 1))(x)
+        x = BatchNormalization()(x)
+
+    # Global Average Pooling
+    x = AveragePooling2D((7, 7))(x)
+
+    # Flatten Layer
+    x = Flatten()(x)
+
+    # Fully Connected Layers
+    x = Dense(4096, activation='relu')(x)
+    x = Dropout(0.5)(x)
+    x = Dense(4096, activation='relu')(x)
+    x = Dropout(0.5)(x)
+    x = Dense(4096, activation='relu')(x)
+
+    # Output Layer
+    output_tensor = Dense(num_classes, activation='softmax')(x)
+
+    # Create the model
+    model = Model(inputs=input_tensor, outputs=output_tensor)
+
+    return model
+
+# Create the ResNet-50 model
+model = resnet_50()
+
+# Compile the model
+optimizer = SGD(lr=0.0001)
+model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+
+# Data Generators
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True)
+
+test_datagen = ImageDataGenerator(rescale=1./255)
+
+batch_size = 32
+
+training_set = train_datagen.flow_from_directory(
+    '/content/drive/MyDrive/Face Images/Final Training Images',
+    target_size=(224, 224),
+    batch_size=batch_size,
+    class_mode='categorical')
+
+test_set = test_datagen.flow_from_directory(
+    '/content/drive/MyDrive/Face Images/Final Testing Images',
+    target_size=(224, 224),
+    batch_size=batch_size,
+    class_mode='categorical')
+
+# Training the model with history
+history = model.fit(
+    training_set,
+    steps_per_epoch=training_set.samples // batch_size,
+    epochs=100,
+    validation_data=test_set,
+    validation_steps=test_set.samples // batch_size)
+
+
+# -------- Input testing ----------
+
+import cv2
+import os
+import numpy as np
+
+# Load and preprocess the input image for testing
+input_image_path = '/content/drive/MyDrive/Face Images/Final Training Images/face13/image_0290_Face_1.jpg'
+input_img = cv2.imread(input_image_path)
+
+# Check if the image is loaded successfully
+if input_img is None:
+    print(f"Error: Unable to read the image from path: {input_image_path}")
+else:
+    print("Image loaded successfully.")
+
+    # Resize the input image
+    input_img = cv2.resize(input_img, (224, 224))
+    input_img = input_img / 255.0
+    input_img = np.expand_dims(input_img, axis=0)  # Add batch dimension
+
+    # Make prediction using the fine-tuned CNN
+    prediction = model.predict(input_img)
+    predicted_class = np.argmax(prediction)
+
+    # Load class labels from the training dataset
+    train_data_dir = '/content/drive/MyDrive/Face Images/Final Training Images'
+    class_names = sorted([d for d in os.listdir(train_data_dir) if os.path.isdir(os.path.join(train_data_dir, d))])
+
+    # Map class indices to class labels
+    class_labels = {i: class_name for i, class_name in enumerate(class_names)}
+
+    # Map the predicted class index to the corresponding class label
+    predicted_class_label = class_labels[predicted_class]
+
+    print(f'Predicted Class: {predicted_class_label}')

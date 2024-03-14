@@ -1,0 +1,90 @@
+from keras.models import Sequential
+from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+from tensorflow.keras.optimizers import SGD
+from tensorflow import keras
+from tensorflow.keras import layers
+
+# Define the model
+model = keras.Sequential()
+
+# Layer 1: Convolutional Layer
+model.add(layers.Conv2D(filters=96, kernel_size=(11, 11), strides=(4, 4), activation="relu", input_shape=(227, 227, 3)))
+model.add(layers.BatchNormalization())
+model.add(layers.MaxPool2D(pool_size=(3, 3), strides=(2, 2)))
+
+# Layer 2: Convolutional Layer
+model.add(layers.Conv2D(filters=256, kernel_size=(5, 5), strides=(1, 1), activation="relu", padding="same"))
+model.add(layers.BatchNormalization())
+model.add(layers.MaxPool2D(pool_size=(3, 3), strides=(2, 2)))
+
+# Layer 3: Convolutional Layer
+model.add(layers.Conv2D(filters=384, kernel_size=(3, 3), strides=(1, 1), activation="relu", padding="same"))
+model.add(layers.BatchNormalization())
+
+# Layer 4: Convolutional Layer
+model.add(layers.Conv2D(filters=384, kernel_size=(3, 3), strides=(1, 1), activation="relu", padding="same"))
+model.add(layers.BatchNormalization())
+
+# Layer 5: Convolutional Layer
+model.add(layers.Conv2D(filters=256, kernel_size=(3, 3), strides=(1, 1), activation="relu", padding="same"))
+model.add(layers.BatchNormalization())
+model.add(layers.MaxPool2D(pool_size=(3, 3), strides=(2, 2)))
+
+# Flatten Layer
+model.add(layers.Flatten())
+
+# Layer 6: Fully Connected Neural Network
+model.add(layers.Dense(4096, activation="relu"))
+model.add(layers.Dropout(0.5))
+
+# Layer 7: Fully Connected Neural Network
+model.add(layers.Dense(4096, activation="relu"))
+model.add(layers.Dropout(0.5))
+
+# Layer 8: Fully Connected Neural Network
+model.add(layers.Dense(4096, activation="relu"))
+model.add(layers.Dropout(0.5))
+
+# Output Layer
+model.add(Dense(16, activation='softmax'))
+
+# Compiling the CNN
+optimizer = SGD(lr=0.0001)  # Adjust the learning rate
+model.compile(loss='categorical_crossentropy', optimizer=optimizer, metrics=['accuracy'])
+
+# Data Generators
+from keras.preprocessing.image import ImageDataGenerator
+
+train_datagen = ImageDataGenerator(
+    rescale=1./255,
+    shear_range=0.2,
+    zoom_range=0.2,
+    horizontal_flip=True)
+
+test_datagen = ImageDataGenerator(rescale=1./255)
+
+batch_size = 32  # Experiment with different batch sizes
+training_set = train_datagen.flow_from_directory(
+    '/content/drive/MyDrive/Dataset/Train',
+    target_size=(227, 227),
+    batch_size=batch_size,
+    class_mode='categorical')  # Keep 'categorical' for one-hot encoding
+
+test_set = test_datagen.flow_from_directory(
+    '/content/drive/MyDrive/Dataset/Test',
+    target_size=(227, 227),
+    batch_size=batch_size,
+    class_mode='categorical')  # Keep 'categorical' for one-hot encoding
+
+# Training the model
+model.fit(
+    training_set,
+    steps_per_epoch=training_set.samples // batch_size,
+    epochs=100,
+    validation_data=test_set,
+    validation_steps=test_set.samples // batch_size)
+
+
+# Evaluate the model on the test set and print the accuracy
+accuracy = model.evaluate(test_set, steps=test_set.samples // 32)[1]
+print(f'Total Accuracy on Test Set: {accuracy * 100:.2f}%')
